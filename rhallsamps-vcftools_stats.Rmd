@@ -1,0 +1,108 @@
+---
+title: "vcftools stats"
+output: html_notebook
+---
+
+
+```{r libraries}
+library(tidyverse)
+```
+Variant-based statistics
+```{r variant_data}
+var_qual <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.lqual", 
+                       delim = "\t", 
+                       col_names = c("chr", 
+                                     "pos", 
+                                     "qual"), 
+                       skip = 1)
+
+var_depth <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.ldepth.mean", 
+                        delim = "\t", 
+                        col_names = c("chr", 
+                                      "pos", 
+                                      "mean_depth", 
+                                      "var_depth"), 
+                        skip = 1)
+
+var_miss <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.lmiss", 
+                       delim = "\t", 
+                       col_names = c("chr", 
+                                     "pos", 
+                                     "nchr", 
+                                     "nfiltered", 
+                                     "nmiss", 
+                                     "fmiss"), 
+                       skip = 1)
+
+var_freq <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.frq", 
+                       delim = "\t", 
+                       col_names = c("chr", "pos", "nalleles", 
+                                     "nchr", "a1", "a2"), 
+                       skip = 1)
+var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
+```
+
+```{r variant_plots}
+ggplot(data = var_qual, 
+       mapping = aes(qual)) + 
+  geom_density(fill = "thistle", 
+               colour = "black", 
+               alpha = 0.3) +
+  xlim(0, 1000) +
+  labs(title = "Variant Quality") +
+  theme_bw()
+
+ggplot(data = var_depth, 
+       mapping = aes(mean_depth)) +
+  geom_density(fill = "thistle", 
+               colour = "black", 
+               alpha = 0.3) +
+  xlim(0, 20) +
+  labs(title = "Mean Variant Depth") +
+  theme_bw()
+
+ggplot(data = var_miss, 
+       mapping = aes(fmiss)) +
+  geom_density(fill = "thistle", 
+               colour = "black", 
+               alpha = 0.3) +
+  labs(title = "Variant Missingness") +
+  theme_bw()
+
+ggplot(data = var_freq, 
+       mapping = aes(maf)) +
+  geom_density(fill = "thistle", 
+               colour = "black", 
+               alpha = 0.3) +
+  labs(title = "Allele Frequencies") +
+  theme_bw()
+```
+
+Individual-based Statistics
+```{r individ_data}
+ind_depth <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.idepth", 
+                        delim = "\t", 
+                        col_names = c("ind", "nsites", "depth"), 
+                        skip = 1)
+
+ind_miss <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.imiss", 
+                       delim = "\t", 
+                       col_names = c("ind", "ndata", "nfiltered", 
+                                     "nmiss", "fmiss"), 
+                       skip = 1)
+```
+
+```{r individ_plots}
+ggplot(data = ind_depth, 
+       mapping = aes(depth)) +
+  geom_histogram(fill = "thistle", 
+                 colour = "black", 
+                 alpha = 0.3)
+
+ggplot(data = ind_miss, 
+       mapping = aes(fmiss)) +
+  geom_histogram(fill = "thistle", 
+                 colour = "black", 
+                 alpha = 0.3)
+```
+
