@@ -1,0 +1,180 @@
+---
+title: "Admixture"
+output: html_notebook
+---
+
+```{r libraries}
+library(tidyverse)
+library(fs)
+```
+
+
+```{r log_likelihoods}
+ngsadmix_dir <- "data/post_bcf/ngsadmix/maf_0.05" # set NGSadmix outputs directory
+N_K <- 5    # set number of K run
+N_reps <- 4  # set number of reps run
+
+# pull all log files
+log_files <- list.files(ngsadmix_dir, pattern = ".log", full.names = T, recursive=T)
+
+# read in all logs
+all_logs <- lapply(1:length(log_files), FUN = function(i) readLines(log_files[i]))
+
+# make list of the line that starts with "best like=" from all logs, just target 'b'
+library(stringr)
+bestlikes_str_list <- sapply(1:length(log_files), FUN= function(x) all_logs[[x]][which(str_sub(all_logs[[x]], 1, 1) == 'b')])
+
+# make dataframe with 1:N_K and N_reps to add likelihood values
+loglikes <- data.frame(K = rep(2:N_K, each=N_reps))
+
+# add the log likelihood (first number in the string)
+loglikes$loglike<-as.vector(as.numeric( sub("\\D*(\\d+).*", "\\1", bestlikes_str_list) ))
+
+tapply(loglikes$loglike, loglikes$K, FUN= function(x) mean(abs(x))/sd(abs(x)))
+```
+
+
+```{r data_org}
+alewife_palette <- c("#636c62", "#869ca8", "#a2878a", "#b6bc9f", "#ecc2a3", "#eceeed", "#242b35", "#a39faa", "#ac9b7c", "#3b3a35")
+
+qcolors <- c(`Q1` = "#636c62", 
+            `Q2` = "#869ca8", 
+            `Q3` = "#a2878a", 
+            `Q4` = "#b6bc9f", 
+            `Q5` = "#ecc2a3", 
+            `Q6` = "#eceeed", 
+            `Q7` = "#242b35", 
+            `Q8` = "#a39faa", 
+            `Q9` = "#ac9b7c", 
+            `Q10` = "#3b3a35")
+
+gord <- c(
+  "BSAT", 
+  "BMAT", 
+  "BCAN", 
+  "HMAT", 
+  "CAN-NNE", 
+  "GRT", 
+  "FIN", 
+  "SNE", 
+  "NNE", 
+  "CAN"
+)
+word <- c("Petitcodiac River", 
+           "Hudson River", 
+           "Lake Yonah", 
+           "Lake Hartwell", 
+           "Altamaha River", 
+           "Roanoke River", 
+           "Lake Superior", 
+           "Lake Michigan", 
+           "Lake Ontario", 
+           "Canandaigua Lake", 
+           "Cayuga Lake", 
+           "Seneca Lake", 
+           "Otisco Lake", 
+           "East Grand Lake", 
+           "Lake Champlain", 
+           "Pattagansett Lake", 
+           "Rogers Lake", 
+           "Quonnipaug Lake", 
+           "Miramichi River", 
+           "Saco River", 
+           "Black Creek", 
+           "Choptank River")
+
+metadata <- read_csv("data/herring_metadata.csv") %>%
+  select(NMFS_DNA_ID, 
+         GENUS, 
+         SPECIES, 
+         STATE_F, 
+         WATERSHED, 
+         WATER_NAME, 
+         region) %>% 
+  filter(NMFS_DNA_ID != "AP028642") %>%
+  mutate(newname = paste0(WATER_NAME, 
+                          "-", 
+                          NMFS_DNA_ID)) %>%
+  mutate(newname = str_replace_all(newname, 
+                                   " +", 
+                                   "_")) %>%
+  mutate(gfact = factor(region, 
+                        levels = gord), 
+         wfact = factor(WATER_NAME, 
+                        levels = word)) %>%
+  arrange(gfact, wfact)
+
+nord <- unique(metadata$newname)
+
+labels <- read_tsv("data/admix-labels.tsv") 
+
+tmp <- metadata %>%
+  mutate(xpos = 1:n())
+
+group_pos <- tmp %>%
+  group_by(region) %>%
+  summarise(midx = (min(xpos) - 0.5 + max(xpos) + 0.5)/ 2, 
+            linex = max(xpos) + 0.5) %>%
+  mutate(midy = 1)
+
+pop_pos <- tmp %>%
+  group_by(region, WATER_NAME) %>%
+  summarise(midx = (min(xpos) - 0.5 + max(xpos) + 0.5) / 2, 
+            linex = max(xpos) + 0.5) %>%
+  mutate(midy = 0)
+
+
+ngsadmix_files <- dir_ls("data/post_bcf/ngsadmix", 
+                         recurse = TRUE, 
+                         glob = "*.qopt_with_sample_names")
+
+ngsAdmix_tib <- lapply(ngsadmix_files, function(x) {
+  read.table(x, 
+             header = TRUE) %>%
+    pivot_longer(cols = -sample, 
+                 names_to = "Qval", 
+                 values_to = "value") %>%
+    mutate(path = x, 
+           .before = sample)
+}) %>%
+  bind_rows() %>%
+  filter(!is.na(value)) %>%
+  mutate(Qval = str_replace(Qval, 
+                            "X", 
+                            "Q")) %>%
+  extract(path, 
+          into = c("K", 
+                   "rep"), 
+          regex = ".*K_([0-9]+)_rep_([0-9]+)/.*$", 
+          convert = TRUE) %>%
+  inner_join(., 
+             metadata, 
+             by = c("sample" = "NMFS_DNA_ID"), 
+             relationship = "many-to-many") %>%
+  mutate(gfact = factor(region, 
+                        levels = gord), 
+         wfact = factor(WATER_NAME, 
+                        levels = word)) %>%
+  arrange(gfact, wfact)
+```
+
+```{r all_Ks}
+ggplot(ngsAdmix_tib) +
+  geom_col(mapping = aes(x = factor(newname, 
+                                    levels = nord), 
+                         y = value, 
+                         fill = Qval)) +
+  scale_fill_manual(values = qcolors) + 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5)) +
+  facet_grid(K ~ rep) +
+  labs(x = "", 
+       y = "Q value") +
+  geom_vline(xintercept = pop_pos$linex, 
+             linetype = 1, 
+             color = "gray25") +
+  geom_vline(xintercept = group_pos$linex)
+```
+
