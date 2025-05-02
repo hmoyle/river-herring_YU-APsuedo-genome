@@ -1,0 +1,39 @@
+---
+title: "PCAdapt Genome-wide Selection Scan"
+output: html_notebook
+---
+
+```{r libraries}
+library(pcadapt)
+library(tidyverse)
+```
+
+
+```{r}
+data <- "data/post_bcf/YU_APseudo_rhallsamps.pcadpt.output.pcadapt.zscores"
+prefix <- "data/post_bcf/YU_APseudo_rhallsamps"
+library(bigutilsr)
+
+zscores <- as.matrix(read.table(data))
+K <- ncol(zscores)
+
+# For one component only
+if (K == 1) {
+	d2 <- (zscores - median(zscores))^2
+} else {
+	d2 <- dist_ogk(zscores)
+}
+
+write.table(d2, file=paste0(prefix, ".pcadapt.test.txt"), quote=F, row.names=F, col.names=F)
+write.table(pchisq(d2, df=K, lower.tail=F), file=paste0(prefix, ".pcadapt.pval.txt"), quote=F, row.names=F, col.names=F)
+```
+
+
+
+```{r}
+x <- pchisq(d2, df=K, lower.tail = F)
+data <- data.frame(pos = 1:3117154, d2 = d2, pval = -log(x))
+ggplot(data) +
+  geom_histogram(aes(pval))
+```
+

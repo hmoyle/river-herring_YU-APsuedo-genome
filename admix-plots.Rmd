@@ -11,7 +11,7 @@ library(fs)
 
 ```{r log_likelihoods}
 ngsadmix_dir <- "data/post_bcf/ngsadmix/maf_0.05" # set NGSadmix outputs directory
-N_K <- 5    # set number of K run
+N_K <- 10    # set number of K run
 N_reps <- 4  # set number of reps run
 
 # pull all log files

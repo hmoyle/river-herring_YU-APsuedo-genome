@@ -43,6 +43,19 @@ var_freq <- read_delim("data/vcftools_stats/river-herring-YU_APseudo_stats.frq",
 var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
 ```
 
+
+```{r}
+var_miss2 <- read_delim("~/Downloads/river-herring_stats.lmiss", 
+                       delim = "\t", 
+                       col_names = c("chr", 
+                                     "pos", 
+                                     "nchr", 
+                                     "nfiltered", 
+                                     "nmiss", 
+                                     "fmiss"), 
+                       skip = 1)
+```
+
 ```{r variant_plots}
 ggplot(data = var_qual, 
        mapping = aes(qual)) + 
@@ -64,7 +77,15 @@ ggplot(data = var_depth,
 
 ggplot(data = var_miss, 
        mapping = aes(fmiss)) +
-  geom_density(fill = "thistle", 
+  geom_histogram(fill = "thistle", 
+               colour = "black", 
+               alpha = 0.3) +
+  labs(title = "Variant Missingness") +
+  theme_bw()
+
+ggplot(data = var_miss2, 
+       mapping = aes(fmiss)) +
+  geom_histogram(fill = "thistle", 
                colour = "black", 
                alpha = 0.3) +
   labs(title = "Variant Missingness") +

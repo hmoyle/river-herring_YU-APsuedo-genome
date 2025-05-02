@@ -94,8 +94,25 @@ all_plot
 ```
 
 ```{r}
-ale_plot <- ggplot(data = filter(all_data, 
-                                 SPECIES != "aestivalis"),
+### ALEWIFE SAMPLES subset from full lane 1 YU alignment ###
+C <- as.matrix(read.table("data/post_bcf/alewife-only_YU.cov"))
+NMFS_DNA_ID <- read_lines("data/post_bcf/alewife-only_samples.txt")
+e <- eigen(C)
+t <- tibble(PC1 = e$vectors[,1], 
+            PC2 = e$vectors[,2], 
+            PC3 = e$vectors[,3], 
+            PC4 = e$vectors[,4])
+temp <- add_column(t, NMFS_DNA_ID)
+ale_data <- left_join(temp, 
+                      metadata, 
+                      by = c("NMFS_DNA_ID" = "NMFS_DNA_ID"))
+
+ale_vars <- e$values/sum(e$values) * 100
+```
+
+
+```{r}
+ale_plot <- ggplot(data = ale_data,
                    mapping = aes(x = PC1, 
                                  y = PC2,
                                  shape = SPECIES,
@@ -115,8 +132,8 @@ ale_plot <- ggplot(data = filter(all_data,
                                                   size = 3))) +
   labs(shape = "Species", 
        fill = "Water Name", 
-       x = paste0("PC1 (",round(all_vars[1], 2),"%)"),
-       y = paste0("PC2 (",round(all_vars[2], 2),"%)")) +
+       x = paste0("PC1 (",round(ale_vars[1], 2),"%)"),
+       y = paste0("PC2 (",round(ale_vars[2], 2),"%)")) +
   geom_text_repel(mapping = aes(label = NMFS_DNA_ID), 
                   max.overlaps = 25)
 ale_plot
