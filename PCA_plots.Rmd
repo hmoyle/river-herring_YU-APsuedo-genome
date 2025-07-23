@@ -27,6 +27,21 @@ all_data <- left_join(temp,
                       by = c("NMFS_DNA_ID" = "NMFS_DNA_ID"))
 
 all_vars <- e$values/sum(e$values) * 100
+
+### ALL SAMPLES filtered for depth and missingness ###
+C <- as.matrix(read.table("data/post_bcf/rhfilt_all_pcansgd.cov"))
+NMFS_DNA_ID <- read_lines("data/post_bcf/samples.txt")
+e <- eigen(C)
+t <- tibble(PC1 = e$vectors[,1], 
+            PC2 = e$vectors[,2], 
+            PC3 = e$vectors[,3], 
+            PC4 = e$vectors[,4])
+temp <- add_column(t, NMFS_DNA_ID)
+allf_data <- left_join(temp, 
+                      metadata, 
+                      by = c("NMFS_DNA_ID" = "NMFS_DNA_ID"))
+
+allf_vars <- e$values/sum(e$values) * 100
 ```
 
 ```{r data_vis, echo = FALSE}
@@ -61,8 +76,7 @@ wn_colors <- c(
   `Lake Superior` = "darkorange4")
 
 sp_shapes <- c(`aestivalis` = 22, 
-               `pseudoharengus` = 24, 
-               `hybrid` = 23)
+               `pseudoharengus` = 24)
 ```
 
 ```{r all_samples, echo = FALSE}
@@ -87,10 +101,34 @@ all_plot <- ggplot(data = all_data,
   labs(shape = "Species", 
        fill = "Water Name", 
        x = paste0("PC1 (",round(all_vars[1], 2),"%)"),
-       y = paste0("PC2 (",round(all_vars[2], 2),"%)")) +
-  geom_text_repel(mapping = aes(label = NMFS_DNA_ID), 
-                  max.overlaps = 25)
+       y = paste0("PC2 (",round(all_vars[2], 2),"%)"))
+
+allf_plot <- ggplot(data = allf_data,
+                    mapping = aes(x = PC1, 
+                                  y = PC2,
+                                  shape = SPECIES,
+                                  fill = WATER_NAME)) +
+  geom_point(size = 3) + 
+  geom_point(stroke = 0.05,
+             alpha = 0.75,
+             size = 3.5) +
+  scale_fill_manual(values = wn_colors) +
+  scale_shape_manual(values = sp_shapes) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  guides(fill = guide_legend(override.aes = list(shape = 22, 
+                                                 stroke = 0.05, 
+                                                 size = 3)), 
+         shape = guide_legend(override.aes = list(stroke = 0.05, 
+                                                  size = 3))) +
+  labs(shape = "Species", 
+       fill = "Water Name", 
+       x = paste0("PC1 (",round(allf_vars[1], 2),"%)"),
+       y = paste0("PC2 (",round(allf_vars[2], 2),"%)")) 
+
+
 all_plot
+allf_plot
 ```
 
 ```{r}
@@ -108,6 +146,21 @@ ale_data <- left_join(temp,
                       by = c("NMFS_DNA_ID" = "NMFS_DNA_ID"))
 
 ale_vars <- e$values/sum(e$values) * 100
+
+### ALEWIFE SAMPLES filtered ###
+C <- as.matrix(read.table("data/post_bcf/rhfilt_alewife_pcansgd.cov"))
+NMFS_DNA_ID <- read_lines("data/post_bcf/alewife-only_samples.txt")
+e <- eigen(C)
+t <- tibble(PC1 = e$vectors[,1], 
+            PC2 = e$vectors[,2], 
+            PC3 = e$vectors[,3], 
+            PC4 = e$vectors[,4])
+temp <- add_column(t, NMFS_DNA_ID)
+alef_data <- left_join(temp, 
+                       metadata, 
+                       by = c("NMFS_DNA_ID" = "NMFS_DNA_ID"))
+
+alef_vars <- e$values/sum(e$values) * 100
 ```
 
 
@@ -133,9 +186,34 @@ ale_plot <- ggplot(data = ale_data,
   labs(shape = "Species", 
        fill = "Water Name", 
        x = paste0("PC1 (",round(ale_vars[1], 2),"%)"),
-       y = paste0("PC2 (",round(ale_vars[2], 2),"%)")) +
-  geom_text_repel(mapping = aes(label = NMFS_DNA_ID), 
-                  max.overlaps = 25)
+       y = paste0("PC2 (",round(ale_vars[2], 2),"%)"))
+
+
+alef_plot <- ggplot(data = alef_data,
+                    mapping = aes(x = PC1, 
+                                  y = PC2,
+                                  shape = SPECIES,
+                                  fill = WATER_NAME)) +
+  geom_point(size = 3) + 
+  geom_point(stroke = 0.05,
+             alpha = 0.75,
+             size = 3.5) +
+  scale_fill_manual(values = wn_colors) +
+  scale_shape_manual(values = sp_shapes) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  guides(fill = guide_legend(override.aes = list(shape = 22, 
+                                                 stroke = 0.05, 
+                                                 size = 3)), 
+         shape = guide_legend(override.aes = list(stroke = 0.05, 
+                                                  size = 3))) +
+  labs(shape = "Species", 
+       fill = "Water Name", 
+       x = paste0("PC1 (",round(alef_vars[1], 2),"%)"),
+       y = paste0("PC2 (",round(alef_vars[2], 2),"%)"))
+
+
 ale_plot
+alef_plot
 ```
 

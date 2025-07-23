@@ -1,0 +1,445 @@
+---
+title: "Haplotypes in the Chrom2 Spike Region"
+author: "Hana Moyle"
+subtitle: "Last Updated: 2024-07-16"
+output: html_notebook
+---
+
+```{r libraries, echo = FALSE}
+library(tidyverse)
+library(ecaRbioinf) # run `remotes::install_github("eriqande/ecaRbioinf")` if you don't already have it
+library(vcfR)
+```
+
+_References_
+Haplo-raster Plots(006): https://eriqande.github.io/thompson-et-al-2020-chinook-salmon-migration-timing/006-haplo-raster-plots.html
+Annotating variants (005):
+https://eriqande.github.io/thompson-et-al-2020-chinook-salmon-migration-timing/005-annotating-variants-near-grev1l.html
+Further Processing(004): https://eriqande.github.io/thompson-et-al-2020-chinook-salmon-migration-timing/004-prepare-haplotypes.html#further_processing
+BEAGLE paper: https://www.cell.com/AJHG/fulltext/S0002-9297(07)63882-8
+
+```{r sample_names, echo = FALSE}
+sample <-read_csv("data/herring_metadata.csv") %>%
+  mutate(newname = paste0(WATER_NAME, 
+                          "-", 
+                          NMFS_DNA_ID)) %>%
+  mutate(newname = str_replace_all(newname, 
+                                   " +", 
+                                   "_"))
+new_names <- sample %>%
+  select(NMFS_DNA_ID, newname)
+
+write_tsv(new_names, "data/beagle_regions/standard/chr3/phased/intermediates/new_names_for_vcf.txt",
+          col_names = FALSE)
+```
+
+
+```{sh, eval = FALSE}
+### if don't already have it, download the miniconda package ###
+conda install conda-forge::mamba ## install mamba for some nice environments
+source .zshrc ## source your config so that you can use conda and mamba
+mamba create -c conda-forge -c bioconda -n vcftools vcftools ## installs the latest version of vcftools and names it vcftools through conda-forge and bioconda
+conda install conda-forge::libzlib ## some of the necessary packages might be missing since we are just working on miniconda, so if it says  "RuntimeError: Found incorrect download: libzlib. Aborting" 
+## run mamba create vcftools again
+mamba create -c conda-forge -c bioconda -n bcftools bcftools ## installs latest version of bcftools
+
+## now if you want to use bcftools and vcftools environments, you can run `conda activate myenv` (myenv=bcftools or vcftools) or shut down your entire shell
+```
+
+
+```{sh, eval = FALSE}
+## now I'm going to reheader one of the full vcf files from beagle_regions/.../chr2_peak/vcf/
+conda activate bcftools # activate bcftools environment
+bcftools reheader -s intermediates/new_names_for_vcf.txt all.vcf.gz > intermediates/for-depths.vcf.gz
+## the filter the sites
+conda activate vcftools # activate vcftools environment
+vcftools --gzvcf intermediates/for-depths.vcf.gz --min-alleles 2 --max-alleles 2 --max-missing 0.4 --maf 0.05 --out intermediates/all-filtered --recode
+## attach the ancestral alleles from American Shad
+ echo '##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral allele">' > aa.hdr
+gunzip resources/GCF_018492685.1.fa.gz
+bgzip resources/GCF_018492685.1.fa # make sure the reference genome is zipped correctly
+bcftools +fill-from-fasta intermediates/all-filtered.recode.vcf -- -c AA -f resources/GCF_018492685.1.fa.gz -h aa.hdr > intermediates/almosst-ready.vcf # I downloaded the full A. Shad genome from UCSC Genome Browser
+```
+
+
+Extract Read Depths Information for Genotypes
+
+```{r}
+rfi <- read.vcfR("data/beagle_regions/standard/chr3/phased/intermediates/almost-ready.vcf")
+
+rfi_depths <- vcfR2tidy(rfi)$gt %>%
+  select(Indiv, POS, gt_DP) %>%
+  mutate(DP = ifelse(is.na(gt_DP), 0, gt_DP)) %>%
+  select(-gt_DP)
+
+dp_means <- rfi_dephts %>%
+  group_by(Indiv) %>%
+  summarise(mean_depth =mean(DP)) %>%
+  arrange(mean_depth)
+dp_means
+
+ggplot(dp_means, 
+       aes(x = mean_depth)) +
+  geom_histogram(binwidth = 0.1)
+```
+
+```{sh, eval = FALSE}
+## all of my samples have pretty good read depth with the lowest being ~.8, so I'm going to keep all of them (other than the other two that had already been removed in previous quality checking)
+tabix -f namaglfl-phased.vcf.gz # now I'm using the phased vcf from beagle_regions/../phased/ 
+bcftools +fill-from-fasta namaglfl-phased.vcf.gz -- -c AA -f resources/GCF_018492685.1.fa.gz -h aa.hdr > namaglfl-pased-with-anc.vcf # and again attaching the ancestral states
+bcftools reheader -s intermediates/new_names_for_vcf.txt namaglfl-pased-with-anc.vcf > namaglfl-phased-with-anc.vcf # and renaming the samples + getting the correct file name
+```
+
+
+```{r phased_data}
+haps <- ecaRbioinf::vcf_haplos2tidy("data/chr2_peak/phased/namaglfl-phased-with-anc.vcf", Anc = "Shad") # read in the phased vcf
+
+samples <- sample %>%
+  select(newname, STATE_F, WATERSHED, WATER_NAME, SPECIES, grouping_v3) # select important field from the metadata
+
+## if we keep the sites that don't have an ancestral allele from Shad, mark those as NA so the derived allelic sites will be NA too
+haps$fix <- haps$fix %>%
+  mutate(AA = ifelse(AA == "N", NA, AA))
+
+## straighten out the haplotype names
+big_haps <- haps$tidy %>%
+  filter(Indiv != "Shad") %>%
+  left_join(haps$avd, by = c("ChromKey", 
+                             "POS", 
+                             "Indiv", 
+                             "haplo")) %>%
+  mutate(haplo_name = paste0(Indiv, "-", haplo)) %>%
+  left_join(rfi_dephts, by = c("POS", "Indiv")) %>%
+  left_join(.,
+            samples, 
+            by = c("Indiv" = "newname"), 
+            relationship = "many-to-many")
+
+## recode a column of alleles as M (for mid-atlantic) and N (for north atlantic)
+mida_ones <- big_haps %>%
+  filter(grouping_v3 == "MIDA") %>%
+  group_by(POS, allele) %>%
+  summarise(freq = n()) %>%
+  filter(rank(-freq, ties = "first") == 1) %>%
+  rename(mida_allele = allele) %>%
+  ungroup()
+
+big_haps <- big_haps %>%
+  left_join(mida_ones, by = "POS") %>%
+  mutate(alle2 = ifelse(allele == mida_allele, "M", "N"))
+
+## join REF and ALT onto it, so that we know which allele is which
+big_haps2 <- haps$fix %>%
+  select(POS, REF, ALT) %>%
+  left_join(big_haps, 
+            ., 
+            by = "POS") %>%
+  select(ChromKey, POS, REF, ALT, everything())
+```
+
+Now, I can plot. Kind of. 
+
+```{sh, eval = FALSE}
+## intersected the gff(download from NCBI) file with the variants to a vcf with only one sample
+bcftools view -s AP028690 namaglfl.vcf.gz > intermediates/one-sample-vcf-chr2-spike-ish.vcf.gz # i picked one of the mid-atlantic anadromous alewife ones
+mamba create -c conda-forge -c bioconda -n bedtools bedtools # didn't have bedtools installed, so I installed it
+conda activate bedtools
+bedtools intersect -a intermediates/one-sample-vcf-chr2-spike-ish.vcf.gz -b resources/GCF_018492685.1_fAloSap1.pri.ncbiRefSeq.gtf.gz -wb > intermediates/variant-annotations.tsv # intersect them
+```
+
+```{r}
+snp_anno <- read_tsv("data/chr2_peak/phased/intermediates/variant-annotations-v2.tsv", 
+                     col_names = c(
+                       "CHROM", 
+                       "POS", 
+                       "dot1", 
+                       "REF", 
+                       "ALT", 
+                       "VSCORE", 
+                       "dot2", 
+                       "dot3", 
+                       "format", 
+                       "a_sample", 
+                       "CHROM2", 
+                       "method", 
+                       "what", 
+                       "start", 
+                       "stop", 
+                       "dot4", 
+                       "strand", 
+                       "phase", 
+                       "biggie"
+                     )) # read in the SNP annotation file
+snp_anno %>%
+  count(what)
+
+## first going to classify sites as belonging to genes, pseudo-genes, or non-genes
+## then classify things within genes as exons, CDS, or other
+ 
+gene_stuff_func <- function(what) {
+  if(any(what == "gene")) {
+    ret <- "gene"
+  } else if (any(what == "pseudogene")) {
+    ret <- "pseudogene"
+  } else {
+    ret <- "non-gene"
+  }
+  ret
+}
+
+gene_stuff <- snp_anno %>%
+  group_by(CHROM, POS) %>%
+  summarise(ginc = gene_stuff_func(what))
+
+exon_stuff_func <- function(what) {
+  if (any(what == "CDS")) {
+    ret <- "CDS"
+  } else if (any(what == "exon")) {
+    ret <- "exon"
+  } else {
+    ret <- "non-exon"
+  }
+  ret
+}
+
+exon_stuff <- snp_anno %>%
+  semi_join(gene_stuff %>% filter(ginc == "gene"), 
+            by = c("CHROM", "POS")) %>% 
+  group_by(CHROM, POS) %>%
+  summarise(einc = exon_stuff_func(what))
+  
+```
+
+
+```{sh, eval = FALSE}
+## checked my java version for at least v1.11, then downloaded snpEff from their website and moved it into my bin folder
+unzip snpEff_latest_core.zip # unzip the file
+rm snpEff_latest_core.zip # remove the extra zipped file
+cd ~/bin/snpEff/
+mkdir -p data/Asap_v1.0
+cd data/Asap_v1.0/
+ln -s ~/Desktop/river-herring-exploratory/data/phased/genome/GCF_018492685.1/genomic.gff genes.gff # softlink the gff
+ln -s ~/Desktop/river-herring-exploratory/data/phased/genome/GCF_018492685.1/GCF_018492685.1_fAloSap1.pri_genomic.fna sequences.fa # softlink the genome fasta
+mamba activate bcftools # activate bcftools so we can use htslib's bgzip
+bgzip genes.gff # zip that bad boy up
+cd ~/bin
+```
+
+
+```{sh, eval = FALSE}
+## add some lines to the config
+if grep -q Asap_v1.0 snpEff/snpEff.config; then
+    echo "Asap_v1.0 already added to config file"
+else
+    echo "Adding Asap_v1.0 to config file"
+    
+    echo "
+# American Shad genome, Asap_v1.0
+Asap_v1.0.genome : Alosa_sapidissima_Asap_V1.0
+" >> snpEff/snpEff.config
+fi
+```
+
+This didn't really work, so I'm going to move on and maybe address it later.
+
+```{sh, eval = FALSE}
+## repeat content around each SNP
+mamba create -c conda-forge -c bioconda -n samtools samtools # create samtools environment
+conda activate samtools # activate it
+samtools faidx genome/GCF_018492685.1/GCF_018492685.1_fAloSap1.pri_genomic.fna NC_055958.1:16600000-17200000 > intermediates/chr2-spike-ish-seq-shad.fna # index the section of the shad reference genome we are using
+gzip -f intermediates/chr2-spike-ish-seq-shad.fna # zip up the baby
+```
+
+```{r, echo = FALSE}
+dna_tibble <- read_lines("data/chr2_peak/phased/intermediates/chr2-spike-ish-seq-shad.fna.gz")[-1] %>%
+  paste(., 
+        collapse = "") %>%
+  strsplit(., 
+           "") %>%
+  .[[1]] %>%
+  tibble(
+    POS = seq(16600000, 
+              17200000, 
+              by = 1), 
+    dna = .
+  ) %>%
+  mutate(inRep = dna %in% c("a", "c", "g", "t"))
+
+dna_repetitive_200 <- dna_tibble %>%
+  mutate(rep_mean_200 = zoo::rollmean(inRep, 
+                                      200, 
+                                      fill = NA, 
+                                      na.rm = TRUE))
+```
+
+
+```{r, echo = FALSE}
+## lets check the genotype of this region for the reference fish
+big_haps2 %>%
+  group_by(POS, REF, ALT, mida_allele) %>%
+  tally() %>%
+  select(-n) %>%
+  mutate(mida_is_ref = REF == mida_allele) %>%
+  group_by(mida_is_ref) %>%
+  tally()
+
+## order haplotypes by the number of mid-atlantic alleles
+chr2_spike_sorts <- big_haps2 %>%
+  group_by(haplo_name) %>%
+  mutate(sumM = sum(alle2 == "M")) %>%
+  ungroup() %>%
+  arrange(desc(sumM), haplo_name, POS)
+
+## define different orders for the haplotypes
+htmp <- chr2_spike_sorts %>%
+  mutate(hnames = haplo_name) %>%
+  mutate(gfact = factor(grouping_v3, 
+                        levels = c( 
+                          "BLUE", 
+                          "HYBR", 
+                          "GRTL", 
+                          "FINL", 
+                          "CONL", 
+                          "MIDL",
+                          "MIDA",
+                          "NATLA"
+                        ))) %>%
+  arrange(gfact, desc(sumM)) 
+
+ht2 <- htmp %>%
+  group_by(Indiv) %>%
+  mutate(sumM_indiv = sum(sumM)) %>%
+  ungroup() %>%
+  arrange(gfact, desc(sumM_indiv), Indiv, sumM)
+
+ht3 <- ht2 %>%
+  mutate(pfact = factor(WATER_NAME, 
+                        levels = c("Altamaha River", 
+                                   "Lake Hartwell", 
+                                   "Lake Yonah", 
+                                   "Petitcodiac River", 
+                                   "Roanoke River",
+                                   "Choptank River", 
+                                   "Hudson River", 
+                                   "Black Creek", 
+                                   "Saco River", 
+                                   "Miramichi River", 
+                                   "Lake Ontario", 
+                                   "Lake Michigan", 
+                                   "Lake Superior", 
+                                   "Canandaigua Lake", 
+                                   "Cayuga Lake", 
+                                   "Seneca Lake", 
+                                   "Otisco Lake", 
+                                   "Pattagansett Lake", 
+                                   "Rogers Lake", 
+                                   "Quonnipaug Lake", 
+                                   "Lake Champlain", 
+                                   "East Grand Lake"))) %>%
+  arrange(gfact, pfact, desc(sumM), Indiv) 
+
+h_ord_group_pop_middy <- unique(ht3$hnames)
+
+## prepare tibbles for the row and column annotations
+tmp <- c(1, 2)
+names(tmp) <- c("pop", "group")
+annotation_columns <- chr2_spike_sorts %>%
+  mutate(hnames = haplo_name) %>%
+  select(hnames, grouping_v3, WATER_NAME) %>%
+  count(hnames, grouping_v3, WATER_NAME) %>%
+  select(-n) %>%
+  gather(key = "column", value = "value", -hnames) %>%
+  mutate(
+    width = 0.0015, 
+    order = tmp[column]
+  )
+ancy_row <- big_haps2 %>%
+  count(POS, mida_allele) %>%
+  select(-n) %>%
+  left_join(haps$fix %>% select(POS, AA), by = "POS") %>%
+  mutate(
+    value = ifelse(mida_allele == AA, "ancestral", "derived"), 
+    row = "mid_anc_or_derived", 
+    order = 3, 
+    height = 0.02
+  )
+
+annotation_rows_full <- bind_rows(
+  exon_stuff %>%
+    ungroup() %>%
+    select(POS, einc) %>%
+    rename(value = einc) %>%
+    mutate(
+      row = "exon_stuff", 
+      order = 1, 
+      height = 0.02
+    ), 
+  ancy_row
+) %>%
+  mutate(POS = as.integer(POS))
+```
+
+Now we plot.
+
+```{r haplo-raster, echo = FALSE}
+source("R/function_prep_elements.R")
+source("R/define_fcolors_all_mn.R")
+source("R/function_extra_labels.R")
+
+plist <- prep_elements(1.66e7, 
+                       1.72e7, 
+                       0.05e7, 
+                       format = "%.2f", 
+                       DSET = big_haps2)
+
+
+
+tmp <- plist$D %>%
+    select(haplo_name, grouping_v3, WATER_NAME) %>%
+    mutate(hnfact = factor(haplo_name, levels = rev(h_ord_group_pop_middy))) %>%
+    arrange(hnfact) %>%
+    group_by(hnfact) %>%
+    slice(1) %>%
+    ungroup() %>%
+    mutate(ypos = 1:n())
+
+group_pos <- tmp %>%
+    group_by(grouping_v3) %>%
+    summarise(midy = (min(ypos) - 0.5 + max(ypos) + 0.5) / 2) %>%
+    mutate(midx = -25)
+
+labels <- read_csv("data/ac_labels.csv")
+
+group_labels <- group_pos %>%
+    left_join(labels %>% group_by(grouping_v3) %>% slice(1))
+
+plot <- haplo_raster_plot(D = plist$D,
+                          h_ord = h_ord_group_pop_middy, 
+                          pos_annot = plist$pos_annot, 
+                          pos_bar_text_size = 8.0, 
+                          annotation_columns = annotation_columns, 
+                          annotation_rows = plist$ann_rows, 
+                          fcolors = fcolors_all_sf, 
+                          anno_row_start = 10, 
+                          snp_quant_tibble = plist$repcontent, 
+                          no_legend = TRUE, 
+                          no_x_labels = TRUE) +
+  expand_limits(x = -50, y = 215) +
+  geom_text(data = group_labels,
+            mapping = aes(x = midx, y = midy, label = group_label),
+            angle = 90,
+            colour = "black",
+            size = 8.0)
+plot
+
+```
+
+```{r, eval = FALSE}
+ggsave(plot, 
+       filename = "figures/haplotypes/chr2_peak/haplo-raster-alleles-no-labs-all-samps.png", 
+       width = 49, 
+       height = 30)
+
+```
+
+

@@ -49,23 +49,22 @@ qcolors <- c(`Q1` = "#636c62",
             `Q10` = "#3b3a35")
 
 gord <- c(
-  "BSAT", 
-  "BMAT", 
   "BCAN", 
-  "HMAT", 
-  "CAN-NNE", 
+  "BMAT", 
+  "BSAT", 
   "GRT", 
   "FIN", 
+  "CAN-NNE",
+  "CAN", 
+  "NNE",
   "SNE", 
-  "NNE", 
-  "CAN"
+  "MAT"
 )
 word <- c("Petitcodiac River", 
            "Hudson River", 
            "Lake Yonah", 
            "Lake Hartwell", 
            "Altamaha River", 
-           "Roanoke River", 
            "Lake Superior", 
            "Lake Michigan", 
            "Lake Ontario", 
@@ -81,7 +80,8 @@ word <- c("Petitcodiac River",
            "Miramichi River", 
            "Saco River", 
            "Black Creek", 
-           "Choptank River")
+           "Choptank River", 
+           "Roanoke River")
 
 metadata <- read_csv("data/herring_metadata.csv") %>%
   select(NMFS_DNA_ID, 
@@ -156,10 +156,43 @@ ngsAdmix_tib <- lapply(ngsadmix_files, function(x) {
          wfact = factor(WATER_NAME, 
                         levels = word)) %>%
   arrange(gfact, wfact)
+
+ngsadmix_files2 <- dir_ls("data/post_bcf/bcf_rhfilt/all/ngsadmix", 
+                         recurse = TRUE, 
+                         glob = "*.qopt_with_sample_names")
+
+ngsAdmix_tib2 <- lapply(ngsadmix_files, function(x) {
+  read.table(x, 
+             header = TRUE) %>%
+    pivot_longer(cols = -sample, 
+                 names_to = "Qval", 
+                 values_to = "value") %>%
+    mutate(path = x, 
+           .before = sample)
+}) %>%
+  bind_rows() %>%
+  filter(!is.na(value)) %>%
+  mutate(Qval = str_replace(Qval, 
+                            "X", 
+                            "Q")) %>%
+  extract(path, 
+          into = c("K", 
+                   "rep"), 
+          regex = ".*K_([0-9]+)_rep_([0-9]+)/.*$", 
+          convert = TRUE) %>%
+  inner_join(., 
+             metadata, 
+             by = c("sample" = "NMFS_DNA_ID"), 
+             relationship = "many-to-many") %>%
+  mutate(gfact = factor(region, 
+                        levels = gord), 
+         wfact = factor(WATER_NAME, 
+                        levels = word)) %>%
+  arrange(gfact, wfact)
 ```
 
 ```{r all_Ks}
-ggplot(ngsAdmix_tib) +
+plot <- ggplot(filter(ngsAdmix_tib, rep == 1)) + 
   geom_col(mapping = aes(x = factor(newname, 
                                     levels = nord), 
                          y = value, 
@@ -176,5 +209,29 @@ ggplot(ngsAdmix_tib) +
              linetype = 1, 
              color = "gray25") +
   geom_vline(xintercept = group_pos$linex)
+
+plot
+```
+
+```{r}
+filt_plot <- ggplot(filter(ngsAdmix_tib2, rep == 1)) + 
+  geom_col(mapping = aes(x = factor(newname, 
+                                    levels = nord), 
+                         y = value, 
+                         fill = Qval)) +
+  scale_fill_manual(values = qcolors) + 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5)) +
+  facet_grid(K ~ rep) +
+  labs(x = "", 
+       y = "Q value") +
+  geom_vline(xintercept = pop_pos$linex, 
+             linetype = 1, 
+             color = "gray25") +
+  geom_vline(xintercept = group_pos$linex)
+
+filt_plot
 ```
 

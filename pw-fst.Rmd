@@ -1,0 +1,454 @@
+---
+title: "Sliding Windows"
+output: html_notebook
+---
+
+
+```{r packages}
+library(tidyverse)
+library(ggtext)
+```
+
+
+```{r matxgrt}
+cols <- c("region", "chr", "midPos", "Nsites", "Fst")
+
+matxgrt_data <- read_delim("data/pw_fst/sliding_window_fst-4ind-pop-size/MAT--x--GRT--size-50000--step-10000.tsv", 
+                           skip = 2, 
+                           delim = "\t", 
+                           col_names = cols, 
+                           show_col_types = FALSE)
+
+matxgrt_data_cum <- matxgrt_data %>%
+  group_by(chr) %>%
+  summarise(max_pos = max(midPos)) %>%
+  mutate(pos_add = lag(cumsum(max_pos), default = 0)) %>%
+  select(chr, pos_add)
+
+matxgrt_data <- matxgrt_data %>% 
+  inner_join(matxgrt_data_cum, by = "chr") %>%
+  mutate(pos_cum = midPos + pos_add)
+
+matxgrt_axis_set <- matxgrt_data %>%
+  group_by(chr) %>%
+  summarise(center = mean(pos_cum))
+
+matxgrt_plot <- ggplot(data = matxgrt_data, 
+                       mapping = aes(x = pos_cum,
+                                     y = Fst, 
+                                     color = as_factor(chr))) +
+  geom_point(alpha = 0.75, size = 0.5) +
+  geom_hline(yintercept = mean(matxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(matxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_x_continuous(label = matxgrt_axis_set$chr, 
+                     breaks = matxgrt_axis_set$center) +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  scale_color_manual(values = rep(c("darkslateblue", "thistle"), 
+                                  unique(length(matxgrt_axis_set$chr)))) +
+  labs(x = NULL, 
+       y = "Fst", 
+       title = "MAT--x--GRT--size-50000--step-10000") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+matxgrt_plot
+
+matxgrt_chr2_plot <- ggplot(data = filter(matxgrt_data, chr == "JBGGWU010000002.1"), 
+                            mapping = aes(x = midPos, 
+                                          y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(matxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(matxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "MAT--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 2 YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+matxgrt_chr2_plot
+
+matxgrt_chr2_elev_plot <- ggplot(data = filter(matxgrt_data, chr == "JBGGWU010000002.1" & midPos >= 50000000 & midPos <= 53000000), 
+                                 mapping = aes(x = midPos, 
+                                               y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(matxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(matxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "MAT--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 2 elevated YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+matxgrt_chr2_elev_plot
+
+matxgrt_chr3_plot <- ggplot(data = filter(matxgrt_data, chr == "JBGGWU010000003.1"), 
+                            mapping = aes(x = midPos, 
+                                          y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(matxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(matxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "MAT--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 3 YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+matxgrt_chr3_plot
+
+matxgrt_chr3_elev_plot <- ggplot(data = filter(matxgrt_data, chr == "JBGGWU010000003.1" & midPos >= 29000000 & midPos <= 32000000), 
+                                 mapping = aes(x = midPos, 
+                                               y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(matxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(matxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "MAT--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 3 elevated YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+matxgrt_chr3_elev_plot
+```
+
+```{r canxgrt}
+canxgrt_data <- read_delim("data/pw_fst/sliding_window_fst-4ind-pop-size/CAN--x--GRT--size-50000--step-10000.tsv", 
+                           skip = 2, 
+                           delim = "\t", 
+                           col_names = cols, 
+                           show_col_types = FALSE)
+
+canxgrt_data_cum <- canxgrt_data %>%
+  group_by(chr) %>%
+  summarise(max_pos = max(midPos)) %>%
+  mutate(pos_add = lag(cumsum(max_pos), default = 0)) %>%
+  select(chr, pos_add)
+
+canxgrt_data <- canxgrt_data %>% 
+  inner_join(canxgrt_data_cum, by = "chr") %>%
+  mutate(pos_cum = midPos + pos_add)
+
+canxgrt_axis_set <- canxgrt_data %>%
+  group_by(chr) %>%
+  summarise(center = mean(pos_cum))
+
+canxgrt_plot <- ggplot(data = canxgrt_data, 
+                       mapping = aes(x = pos_cum,
+                                     y = Fst, 
+                                     color = as_factor(chr))) +
+  geom_point(alpha = 0.75, size = 0.5) +
+  geom_hline(yintercept = mean(canxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(canxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_x_continuous(label = canxgrt_axis_set$chr, 
+                     breaks = canxgrt_axis_set$center) +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  scale_color_manual(values = rep(c("darkslateblue", "thistle"), 
+                                  unique(length(canxgrt_axis_set$chr)))) +
+  labs(x = NULL, 
+       y = "Fst", 
+       title = "CAN--x--GRT--size-50000--step-10000") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxgrt_plot
+
+canxgrt_chr2_plot <- ggplot(data = filter(canxgrt_data, chr == "JBGGWU010000002.1"), 
+                            mapping = aes(x = midPos, 
+                                          y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(canxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 2 YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxgrt_chr2_plot
+
+canxgrt_chr2_elev_plot <- ggplot(data = filter(canxgrt_data, chr == "JBGGWU010000002.1" & midPos >= 50000000 & midPos <= 53000000), 
+                                 mapping = aes(x = midPos, 
+                                               y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(canxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 2 elevated YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxgrt_chr2_elev_plot
+
+canxgrt_chr3_plot <- ggplot(data = filter(canxgrt_data, chr == "JBGGWU010000003.1"), 
+                            mapping = aes(x = midPos, 
+                                          y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(canxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 3 YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxgrt_chr3_plot
+
+canxgrt_chr3_elev_plot <- ggplot(data = filter(canxgrt_data, chr == "JBGGWU010000003.1" & midPos >= 29000000 & midPos <= 32000000), 
+                                 mapping = aes(x = midPos, 
+                                               y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxgrt_data$Fst)) +
+  geom_hline(yintercept = quantile(canxgrt_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--GRT--size-50000--step-1000", 
+       subtitle = "Chromosome 3 elevated YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxgrt_chr3_elev_plot
+```
+
+```{r canxmat}
+canxmat_data <- read_delim("data/pw_fst/sliding_window_fst-4ind-pop-size/CAN--x--MAT--size-50000--step-10000.tsv", 
+                           skip = 2, 
+                           delim = "\t", 
+                           col_names = cols, 
+                           show_col_types = FALSE)
+
+canxmat_data_cum <- canxmat_data %>%
+  group_by(chr) %>%
+  summarise(max_pos = max(midPos)) %>%
+  mutate(pos_add = lag(cumsum(max_pos), default = 0)) %>%
+  select(chr, pos_add)
+
+canxmat_data <- canxmat_data %>% 
+  inner_join(canxmat_data_cum, by = "chr") %>%
+  mutate(pos_cum = midPos + pos_add)
+
+canxmat_axis_set <- canxmat_data %>%
+  group_by(chr) %>%
+  summarise(center = mean(pos_cum))
+
+canxmat_plot <- ggplot(data = canxmat_data, 
+                       mapping = aes(x = pos_cum,
+                                     y = Fst, 
+                                     color = as_factor(chr))) +
+  geom_point(alpha = 0.75, size = 0.5) +
+  geom_hline(yintercept = mean(canxmat_data$Fst)) +
+  geom_hline(yintercept = quantile(canxmat_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_x_continuous(label = canxmat_axis_set$chr, 
+                     breaks = canxmat_axis_set$center) +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  scale_color_manual(values = rep(c("darkslateblue", "thistle"), 
+                                  unique(length(canxmat_axis_set$chr)))) +
+  labs(x = NULL, 
+       y = "Fst", 
+       title = "CAN--x--MAT--size-50000--step-10000") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxmat_plot
+
+canxmat_chr2_plot <- ggplot(data = filter(canxmat_data, chr == "JBGGWU010000002.1"), 
+                            mapping = aes(x = midPos, 
+                                          y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxmat_data$Fst)) +
+  geom_hline(yintercept = quantile(canxmat_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--MAT--size-50000--step-1000", 
+       subtitle = "Chromosome 2 YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxmat_chr2_plot
+
+canxmat_chr2_elev_plot <- ggplot(data = filter(canxmat_data, chr == "JBGGWU010000002.1" & midPos >= 50000000 & midPos <= 53000000), 
+                                 mapping = aes(x = midPos, 
+                                               y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxmat_data$Fst)) +
+  geom_hline(yintercept = quantile(canxmat_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--MAT--size-50000--step-1000", 
+       subtitle = "Chromosome 2 elevated YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxmat_chr2_elev_plot
+
+canxmat_chr3_plot <- ggplot(data = filter(canxmat_data, chr == "JBGGWU010000003.1"), 
+                            mapping = aes(x = midPos, 
+                                          y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxmat_data$Fst)) +
+  geom_hline(yintercept = quantile(canxmat_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--MAT--size-50000--step-1000", 
+       subtitle = "Chromosome 3 YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxmat_chr3_plot
+
+canxmat_chr3_elev_plot <- ggplot(data = filter(canxmat_data, chr == "JBGGWU010000003.1" & midPos >= 29000000 & midPos <= 32000000), 
+                                 mapping = aes(x = midPos, 
+                                               y = Fst)) +
+  geom_point(alpha = 0.75, size = 0.5, color = "darkslateblue") +
+  geom_hline(yintercept = mean(canxmat_data$Fst)) +
+  geom_hline(yintercept = quantile(canxmat_data$Fst, probs = c(0.99)), 
+             linetype = "dashed", 
+             colour = "red") +
+  scale_y_continuous(expand = c(0,0), 
+                     limits = c(-0.05, 1)) +
+  labs(x = "Mid-Window Position", 
+       y = "Fst", 
+       title = "CAN--x--MAT--size-50000--step-1000", 
+       subtitle = "Chromosome 3 elevated YU_APseudo genome") +
+  theme_bw() +
+  theme(legend.position = "none", 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        axis.title.y = element_markdown(), 
+        axis.text.x = element_text(angle = 90, 
+                                   size = 8, 
+                                   vjust = 0.5))
+canxmat_chr3_elev_plot
+```
+
+
+
