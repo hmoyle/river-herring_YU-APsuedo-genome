@@ -45,6 +45,20 @@ var_freq$maf <- var_freq %>% select(a1, a2) %>% apply(1, function(z) min(z))
 
 
 ```{r}
+var_qual2 <- read_delim("~/Downloads/river-herring_stats.lqual", 
+                       delim = "\t", 
+                       col_names = c("chr", 
+                                     "pos", 
+                                     "qual"), 
+                       skip = 1)
+
+var_depth2 <- read_delim("~/Downloads/river-herring_stats.ldepth.mean", 
+                        delim = "\t", 
+                        col_names = c("chr", 
+                                      "pos", 
+                                      "mean_depth", 
+                                      "var_depth"), 
+                        skip = 1)
 var_miss2 <- read_delim("~/Downloads/river-herring_stats.lmiss", 
                        delim = "\t", 
                        col_names = c("chr", 
@@ -59,38 +73,72 @@ var_miss2 <- read_delim("~/Downloads/river-herring_stats.lmiss",
 ```{r variant_plots}
 ggplot(data = var_qual, 
        mapping = aes(qual)) + 
-  geom_density(fill = "thistle", 
+  geom_histogram(fill = "thistle", 
                colour = "black", 
-               alpha = 0.3) +
-  xlim(0, 1000) +
-  labs(title = "Variant Quality") +
+               alpha = 0.3, 
+               binwidth = 20) +
+  xlim(30, 1000) +
+  labs(title = "Variant Quality (YU_APseudo_1.1)") +
   theme_bw()
 
+ggplot(data = var_qual2, 
+       mapping = aes(qual)) + 
+  geom_histogram(fill = "lightskyblue", 
+               colour = "black", 
+               alpha = 0.3, 
+               binwidth = 20) +
+  xlim(30, 1000) +
+  labs(title = "Variant Quality (fAloSap.pri)") +
+  theme_bw()
+```
+
+```{r}
 ggplot(data = var_depth, 
        mapping = aes(mean_depth)) +
-  geom_density(fill = "thistle", 
+  geom_histogram(fill = "thistle", 
                colour = "black", 
-               alpha = 0.3) +
-  xlim(0, 20) +
-  labs(title = "Mean Variant Depth") +
+               alpha = 0.3, 
+               binwidth = 0.1) +
+  xlim(0, 10) +
+  ylim(0, 1.25e+06) +
+  labs(title = "Mean Variant Depth (YU_APseudo_1.1)") +
   theme_bw()
 
+ggplot(data = var_depth2, 
+       mapping = aes(mean_depth)) +
+  geom_histogram(fill = "lightskyblue", 
+               colour = "black", 
+               alpha = 0.3, 
+               binwidth = 0.1) +
+  xlim(0, 10) +
+  ylim(0, 1.25e+06) +
+  labs(title = "Mean Variant Depth (fAloSap1.pri)") +
+  theme_bw()
+```
+
+```{r}
 ggplot(data = var_miss, 
        mapping = aes(fmiss)) +
   geom_histogram(fill = "thistle", 
                colour = "black", 
-               alpha = 0.3) +
-  labs(title = "Variant Missingness") +
-  theme_bw()
+               alpha = 0.3, 
+               binwidth = 0.01) +
+  labs(title = "Variant Missingness (YU_APseudo_1.1)") +
+  theme_bw() +
+  ylim(0,8e+05)
 
 ggplot(data = var_miss2, 
        mapping = aes(fmiss)) +
-  geom_histogram(fill = "thistle", 
+  geom_histogram(fill = "lightskyblue", 
                colour = "black", 
-               alpha = 0.3) +
-  labs(title = "Variant Missingness") +
-  theme_bw()
+               alpha = 0.3, 
+               binwidth = 0.01) +
+  labs(title = "Variant Missingness (fAloSap1.pri)") +
+  theme_bw() +
+  ylim(0,8e+05)
+```
 
+```{r}
 ggplot(data = var_freq, 
        mapping = aes(maf)) +
   geom_density(fill = "thistle", 

@@ -1,5 +1,5 @@
 ---
-title: "Haplotypes in the Chrom2 Spike Region"
+title: "Haplotypes in the Chrom3 Spike Region"
 author: "Hana Moyle"
 subtitle: "Last Updated: 2024-07-16"
 output: html_notebook
@@ -29,7 +29,12 @@ sample <-read_csv("data/herring_metadata.csv") %>%
 new_names <- sample %>%
   select(NMFS_DNA_ID, newname)
 
-write_tsv(new_names, "data/beagle_regions/standard/chr3/phased/intermediates/new_names_for_vcf.txt",
+dir.create("data/beagle_regions/standard/chr3/vcf/outputs", 
+           recursive = T, showWarnings = F)
+dir.create("data/beagle_regions/standard/chr3/vcf/intermediates", 
+           recursive = T, showWarnings = F)
+
+write_tsv(new_names, "data/beagle_regions/standard/chr3/vcf/intermediates/new_names_for_vcf.txt",
           col_names = FALSE)
 ```
 
@@ -48,31 +53,31 @@ mamba create -c conda-forge -c bioconda -n bcftools bcftools ## installs latest 
 
 
 ```{sh, eval = FALSE}
-## now I'm going to reheader one of the full vcf files from beagle_regions/.../chr2_peak/vcf/
+## I will be working in the chr3 folder of beagle_regions
 conda activate bcftools # activate bcftools environment
-bcftools reheader -s intermediates/new_names_for_vcf.txt all.vcf.gz > intermediates/for-depths.vcf.gz
+bcftools reheader -s vcf/intermediates/new_names_for_vcf.txt vcf/all.vcf.gz > vcf/intermediates/for-depths.vcf.gz
 ## the filter the sites
 conda activate vcftools # activate vcftools environment
-vcftools --gzvcf intermediates/for-depths.vcf.gz --min-alleles 2 --max-alleles 2 --max-missing 0.4 --maf 0.05 --out intermediates/all-filtered --recode
+vcftools --gzvcf vcf/intermediates/for-depths.vcf.gz --min-alleles 2 --max-alleles 2 --max-missing 0.4 --maf 0.05 --out vcf/intermediates/all-filtered --recode
 ## attach the ancestral alleles from American Shad
  echo '##INFO=<ID=AA,Number=1,Type=String,Description="Ancestral allele">' > aa.hdr
-gunzip resources/GCF_018492685.1.fa.gz
-bgzip resources/GCF_018492685.1.fa # make sure the reference genome is zipped correctly
-bcftools +fill-from-fasta intermediates/all-filtered.recode.vcf -- -c AA -f resources/GCF_018492685.1.fa.gz -h aa.hdr > intermediates/almosst-ready.vcf # I downloaded the full A. Shad genome from UCSC Genome Browser
+bgzip vcf/intermediates/all-filtered.recode.vcf
+tabix vcf/intermediates/all-filtered.recode.vcf.gz
+bcftools +fill-from-fasta vcf/intermediates/all-filtered.recode.vcf.gz -- -c AA -f ncbi_dataset/data/GCA_046254945.1/GCA_046254945.1_YU_APseudo_1.1_genomic.fna.gz -h aa.hdr > vcf/intermediates/almost-ready.vcf
 ```
 
 
 Extract Read Depths Information for Genotypes
 
 ```{r}
-rfi <- read.vcfR("data/beagle_regions/standard/chr3/phased/intermediates/almost-ready.vcf")
+rfi <- read.vcfR("data/beagle_regions/standard/chr3/vcf/intermediates/almost-ready.vcf")
 
 rfi_depths <- vcfR2tidy(rfi)$gt %>%
   select(Indiv, POS, gt_DP) %>%
   mutate(DP = ifelse(is.na(gt_DP), 0, gt_DP)) %>%
   select(-gt_DP)
 
-dp_means <- rfi_dephts %>%
+dp_means <- rfi_depths %>%
   group_by(Indiv) %>%
   summarise(mean_depth =mean(DP)) %>%
   arrange(mean_depth)
@@ -84,18 +89,19 @@ ggplot(dp_means,
 ```
 
 ```{sh, eval = FALSE}
-## all of my samples have pretty good read depth with the lowest being ~.8, so I'm going to keep all of them (other than the other two that had already been removed in previous quality checking)
-tabix -f namaglfl-phased.vcf.gz # now I'm using the phased vcf from beagle_regions/../phased/ 
-bcftools +fill-from-fasta namaglfl-phased.vcf.gz -- -c AA -f resources/GCF_018492685.1.fa.gz -h aa.hdr > namaglfl-pased-with-anc.vcf # and again attaching the ancestral states
-bcftools reheader -s intermediates/new_names_for_vcf.txt namaglfl-pased-with-anc.vcf > namaglfl-phased-with-anc.vcf # and renaming the samples + getting the correct file name
+## moving on to phased in chr3 beagle regions
+tabix -f phased/all.vcf.gz
+
+bcftools +fill-from-fasta phased/all.vcf.gz -- -c AA -f ncbi_dataset/data/GCA_046254945.1/GCA_046254945.1_YU_APseudo_1.1_genomic.fna.gz -h aa.hdr > phased/all-phased-with-anc.vcf # and again attaching the ancestral states
+bcftools reheader -s vcf/intermediates/new_names_for_vcf.txt phased/all-phased-with-anc.vcf > phased/all-named-phased-with-anc.vcf # and renaming the samples + getting the correct file name
 ```
 
 
 ```{r phased_data}
-haps <- ecaRbioinf::vcf_haplos2tidy("data/chr2_peak/phased/namaglfl-phased-with-anc.vcf", Anc = "Shad") # read in the phased vcf
+haps <- ecaRbioinf::vcf_haplos2tidy("data/beagle_regions/standard/chr3/phased/all-named-phased-with-anc.vcf", Anc = "Alewife") # read in the phased vcf
 
 samples <- sample %>%
-  select(newname, STATE_F, WATERSHED, WATER_NAME, SPECIES, grouping_v3) # select important field from the metadata
+  select(newname, STATE_F, WATERSHED, WATER_NAME, SPECIES, region) # select important field from the metadata
 
 ## if we keep the sites that don't have an ancestral allele from Shad, mark those as NA so the derived allelic sites will be NA too
 haps$fix <- haps$fix %>%
@@ -103,13 +109,13 @@ haps$fix <- haps$fix %>%
 
 ## straighten out the haplotype names
 big_haps <- haps$tidy %>%
-  filter(Indiv != "Shad") %>%
+  filter(Indiv != "Alewife") %>%
   left_join(haps$avd, by = c("ChromKey", 
                              "POS", 
                              "Indiv", 
                              "haplo")) %>%
   mutate(haplo_name = paste0(Indiv, "-", haplo)) %>%
-  left_join(rfi_dephts, by = c("POS", "Indiv")) %>%
+  left_join(rfi_depths, by = c("POS", "Indiv")) %>%
   left_join(.,
             samples, 
             by = c("Indiv" = "newname"), 
@@ -117,7 +123,7 @@ big_haps <- haps$tidy %>%
 
 ## recode a column of alleles as M (for mid-atlantic) and N (for north atlantic)
 mida_ones <- big_haps %>%
-  filter(grouping_v3 == "MIDA") %>%
+  filter(region == "MAT") %>%
   group_by(POS, allele) %>%
   summarise(freq = n()) %>%
   filter(rank(-freq, ties = "first") == 1) %>%
@@ -284,25 +290,22 @@ big_haps2 %>%
   tally()
 
 ## order haplotypes by the number of mid-atlantic alleles
-chr2_spike_sorts <- big_haps2 %>%
+chr3_spike_sorts <- big_haps2 %>%
   group_by(haplo_name) %>%
   mutate(sumM = sum(alle2 == "M")) %>%
   ungroup() %>%
   arrange(desc(sumM), haplo_name, POS)
 
 ## define different orders for the haplotypes
-htmp <- chr2_spike_sorts %>%
+htmp <- chr3_spike_sorts %>%
   mutate(hnames = haplo_name) %>%
-  mutate(gfact = factor(grouping_v3, 
+  mutate(gfact = factor(region, 
                         levels = c( 
-                          "BLUE", 
-                          "HYBR", 
-                          "GRTL", 
-                          "FINL", 
-                          "CONL", 
-                          "MIDL",
-                          "MIDA",
-                          "NATLA"
+                          "FIN", "GRT", 
+                          "CAN", "MAT", 
+                          "CAN-NNE", "NNE", 
+                          "SNE", 
+                          "BCAN", "BMAT", "BSAT"
                         ))) %>%
   arrange(gfact, desc(sumM)) 
 
@@ -343,10 +346,10 @@ h_ord_group_pop_middy <- unique(ht3$hnames)
 ## prepare tibbles for the row and column annotations
 tmp <- c(1, 2)
 names(tmp) <- c("pop", "group")
-annotation_columns <- chr2_spike_sorts %>%
+annotation_columns <- chr3_spike_sorts %>%
   mutate(hnames = haplo_name) %>%
-  select(hnames, grouping_v3, WATER_NAME) %>%
-  count(hnames, grouping_v3, WATER_NAME) %>%
+  select(hnames, region, WATER_NAME) %>%
+  count(hnames, region, WATER_NAME) %>%
   select(-n) %>%
   gather(key = "column", value = "value", -hnames) %>%
   mutate(
@@ -382,12 +385,12 @@ annotation_rows_full <- bind_rows(
 Now we plot.
 
 ```{r haplo-raster, echo = FALSE}
-source("R/function_prep_elements.R")
-source("R/define_fcolors_all_mn.R")
-source("R/function_extra_labels.R")
+source("function_prep_elements.R")
+source("define_fcolors_all_mn.R")
+source("function_extra_labels.R")
 
-plist <- prep_elements(1.66e7, 
-                       1.72e7, 
+plist <- prep_elements(2.9e7, 
+                       3.2e7, 
                        0.05e7, 
                        format = "%.2f", 
                        DSET = big_haps2)
@@ -395,7 +398,7 @@ plist <- prep_elements(1.66e7,
 
 
 tmp <- plist$D %>%
-    select(haplo_name, grouping_v3, WATER_NAME) %>%
+    select(haplo_name, region, WATER_NAME) %>%
     mutate(hnfact = factor(haplo_name, levels = rev(h_ord_group_pop_middy))) %>%
     arrange(hnfact) %>%
     group_by(hnfact) %>%
